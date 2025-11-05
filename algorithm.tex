@@ -1,0 +1,84 @@
+% Algorithmic description of the RMS Double DQN pipeline
+\documentclass{article}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{amsmath}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\begin{document}
+\title{Reconfigurable Manufacturing System Double DQN Pipeline}
+\author{Project Documentation}
+\date{\today}
+\maketitle
+
+\begin{abstract}
+This document presents an end-to-end algorithmic description, in pseudocode form, of the Reconfigurable Manufacturing System (RMS) scheduling pipeline that integrates real and synthetic data, reward shaping, and advanced Deep Q-Learning techniques. Each stage is detailed to facilitate reproducibility and scientific communication.
+\end{abstract}
+
+\begin{algorithm}
+\caption{RMS Double DQN Training and Evaluation Pipeline}
+\begin{algorithmic}[1]
+\Require Configuration dictionary $\mathcal{C}$ specifying paths, hyperparameters, reward weights, exploration schedule, and visualization settings.
+\Require Real CSV dataset $D_{\text{real}}$, synthetic generation budget $N_{\text{syn}}$, number of training episodes $E$, evaluation episodes $E_{\text{eval}}$.
+\Ensure Trained policy network $Q_{\theta}$, diagnostics, and visual analytics.
+
+\Statex
+\Procedure{PrepareData}{$\mathcal{C}, D_{\text{real}}, N_{\text{syn}}$}
+    \State Load $D_{\text{real}}$; remove inconsistent entries, impute missing values, and normalize numerical fields.
+    \State Engineer RMS-specific features (critical ratio, slack, energy intensity, setup complexity, reconfiguration frequency).
+    \State Fit parametric distributions to the cleaned dataset; sample $N_{\text{syn}}$ synthetic jobs respecting machine capabilities and deadline distributions.
+    \State Return aggregated dataset $D = D_{\text{real}} \cup D_{\text{syn}}$ and normalization statistics.
+\EndProcedure
+
+\Statex
+\Procedure{InitializeAgent}{$\mathcal{C}, D$}
+    \State Instantiate RMS environment with state encoder using statistics from $D$.
+    \State Build dueling Double DQN networks $(Q_{\theta}, Q_{\bar{\theta}})$ with architecture given by $\mathcal{C}$.
+    \State Initialize prioritized experience replay buffer with capacity $\mathcal{C}[\text{buffer\_size}]$.
+    \State Configure exploration schedules (\textit{e.g.}, $\varepsilon$-greedy decay, Boltzmann temperature) and reward shaping coefficients.
+\EndProcedure
+
+\Statex
+\Procedure{Train}{$E$}
+    \For{episode $= 1$ to $E$}
+        \State Reset environment to sampled RMS scenario; receive initial state $s_0$.
+        \For{each decision step $t$}
+            \State Sample action $a_t$ from exploration policy using $Q_{\theta}(s_t)$ and valid-action mask.
+            \State Execute $a_t$; observe reward $r_t$, next state $s_{t+1}$, feasibility flag $f_t$.
+            \State Compose shaped reward $r_t^{\prime}$ combining tardiness, energy, setup, idle penalties, and throughput bonuses per $\mathcal{C}$.
+            \State Store transition $(s_t, a_t, r_t^{\prime}, s_{t+1}, f_t)$ with priority $|\delta_t|$ in replay buffer.
+            \If{buffer size $> \mathcal{C}[\text{batch\_size}]$}
+                \State Sample mini-batch with prioritized importance weights.
+                \State Compute Double DQN targets using $Q_{\theta}$ for action selection and $Q_{\bar{\theta}}$ for evaluation.
+                \State Update $Q_{\theta}$ via gradient descent with clipped gradients and learning rate scheduler.
+                \State Update replay priorities with new TD-errors.
+            \EndIf
+            \State Apply scheduled decay or warm restarts to exploration parameters.
+        \EndFor
+        \State Soft-update target network parameters $Q_{\bar{\theta}} \leftarrow \tau Q_{\theta} + (1-\tau) Q_{\bar{\theta}}$.
+        \State Log episode metrics (returns, tardiness, energy consumption, buffer diagnostics).
+    \EndFor
+\EndProcedure
+
+\Statex
+\Procedure{Evaluate}{$E_{\text{eval}}$}
+    \For{episode $= 1$ to $E_{\text{eval}}$}
+        \State Run greedy policy derived from $Q_{\theta}$ on held-out RMS scenarios.
+        \State Record performance metrics: throughput, lateness distribution, energy usage, reconfiguration count, machine utilization fairness.
+    \EndFor
+    \State Aggregate statistics and compare against baseline heuristics if available.
+\EndProcedure
+
+\Statex
+\Procedure{VisualizeAndReport}{ }
+    \State Generate 30 analytics plots summarizing training curves, exploration dynamics, Q-value stability, RMS KPIs, and scheduling timelines.
+    \State Persist trained weights, configuration snapshot, and serialized diagnostics for reproducibility.
+\EndProcedure
+
+\Statex
+\State \textbf{return} $Q_{\theta}$, evaluation report, and visualization assets.
+\end{algorithmic}
+\end{algorithm}
+
+\end{document}
